@@ -1,0 +1,224 @@
+//*pin layout
+//-------------------------------------------------------------------------------------------
+//                    |   dir1    dir2    ENCA    ENCB    PWM(enable)    CAN_Rx   CAN_Tx
+//-------------------------------------------------------------------------------------------
+//  Right_motor(M1)   |   26       27     32      33        25            4        5
+//  Left_motor (M2)   |   16       17     18      19        21
+//-------------------------------------------------------------------------------------------
+// gpio : https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv415gpio_int_type_t
+// ESP_ERROR_CHECK : assert (https://www.youtube.com/watch?v=3ydH14AFhMQ&t=128s) 
+// console : input   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/console.html
+//         : example https://www.youtube.com/watch?v=fzHefRPDy_w
+
+// 표준 입력 출력 헤더 파일, 주로 printf와 같은 함수를 사용하기 위해서 선언
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "esp_err.h"
+#include "esp_mac.h"
+
+// FreeRTOS 헤더 파일, Task 관련 함수를 사용하기 위해서 선언
+// 이 코드에서는 vTaskDelay 사용합니다.
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include "motor_control.h"
+
+int motor_speed = 0;
+int m1_rotation = 0;
+int m2_rotation = 0;
+
+// 콘솔 기능 사용을 위한 헤더
+#include "esp_console.h"
+// NVS (비휘발성 저장소) 사용을 위한 헤더 (REPL 환경 구성에 필요)
+#include "nvs.h"
+#include "nvs_flash.h"
+// 프롬프트에 표시될 기본 이름을 프로젝트 타겟으로 설정
+#define PROMPT_STR CONFIG_IDF_TARGET
+
+// 모터 속도 제어 명령어 핸들러
+int cmd_speed_handler(int argc, char **argv) {
+    if (argc != 3) {
+        printf("사용법: speed <m1속도> <m2속도>\n");
+        return 0;
+    }
+    // 문자 정수를 속도로 변환
+    int m1_speed = atoi(argv[1]); 
+    int m2_speed = atoi(argv[2]);
+    // 받은값 출력
+    printf("M1 속도: %d, M2 속도: %d\n", m1_speed, m2_speed);
+    // 모터 실행
+    motor1_drive(m1_speed);
+    motor2_drive(m2_speed);
+
+    return 0;
+}
+
+void register_console_commands(void)
+{
+    const esp_console_cmd_t speed_cmd = {
+        .command = "speed",
+        .help = "모터 속도 설정: speed <M1> <M2>",
+        .hint = NULL,
+        .func = &cmd_speed_handler,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK(esp_console_cmd_register(&speed_cmd));
+}
+
+// PID 제어 Task
+void pid_task(void *arg) {
+    while (1) {
+        if (pid_flag) {
+            pid_flag = false;  // 플래그 초기화
+
+            // 선속도 m/s >> RPM x (pi x 바퀴 지름 (m)) / 60 (s) (0.00455)
+            // 반대로 선속도가 주어질시 RPM = V (m/s) x 60 / 바퀴 둘레(219.78) (m)
+            motor1MeasuredSpeed = encoder1Delta1Count * 10 / 11; //RPM
+            motor2MeasuredSpeed = encoder2Delta1Count * 10 / 11;
+
+            // ERROR
+            motor1SpeedError = motor1TargetSpeed - motor1MeasuredSpeed;
+            motor1DeltaSpeedError = motor1SpeedError - motor1PrevSpeedError;
+            motor1ErrorSum = motor1ErrorSum + motor1SpeedError;
+            motor1PrevSpeedError = motor1SpeedError;
+
+            motor2SpeedError = motor2TargetSpeed - motor2MeasuredSpeed;
+            motor2DeltaSpeedError = motor2SpeedError - motor2PrevSpeedError;
+            motor2ErrorSum = motor2ErrorSum + motor2SpeedError;
+            motor2PrevSpeedError = motor2SpeedError;
+
+            // PID
+            motor1ControlP = motor1Kp * motor1SpeedError;
+            motor1ControlI = motor1Ki * motor1ErrorSum;
+            motor1ControlD = motor1Kd * motor1DeltaSpeedError;
+
+            motor2ControlP = motor2Kp * motor2SpeedError;
+            motor2ControlI = motor2Ki * motor2ErrorSum;
+            motor2ControlD = motor2Kd * motor2DeltaSpeedError;
+
+            motor1ControlOutput = (int)(motor1ControlP + motor1ControlI + motor1ControlD);
+            motor2ControlOutput = (int)(motor2ControlP + motor2ControlI + motor2ControlD);
+
+            if (motor1ControlOutput > 255)       motor1ControlOutput = 255;
+            else if (motor1ControlOutput < -255) motor1ControlOutput = -255;
+            if (motor2ControlOutput > 255)       motor2ControlOutput = 255;
+            else if (motor2ControlOutput < -255) motor2ControlOutput = -255;
+
+            motor1_drive(motor1ControlOutput);
+            motor2_drive(motor2ControlOutput);
+
+            motor1Angle = (int)encoder1Count / 11.0 * 3.0;
+            motor2Angle = (int)encoder2Count / 11.0 * 3.0;
+
+            printf("%f", motor1TargetSpeed);
+            printf(",");
+            printf("%f", motor1MeasuredSpeed);
+            printf(",");
+            printf("%f", motor2TargetSpeed);
+            printf(",");
+            printf("%f\n", motor2MeasuredSpeed);
+        }
+        vTaskDelay(pdMS_TO_TICKS(10)); // 10ms 대기
+    }
+}
+
+// 콘솔 Task
+void console_task(void *arg) {
+    // NVS 초기화
+    ESP_ERROR_CHECK(nvs_flash_init());
+    ESP_ERROR_CHECK(esp_console_init());
+
+    // 콘솔 명령어 등록
+    register_console_commands();
+
+    // REPL 환경 구성
+    esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
+    repl_config.prompt = PROMPT_STR ">";
+
+    esp_console_dev_uart_config_t uart_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
+    esp_console_repl_t *repl = NULL;
+    ESP_ERROR_CHECK(esp_console_new_repl_uart(&uart_config, &repl_config, &repl));
+
+    // REPL 시작
+    ESP_ERROR_CHECK(esp_console_start_repl(repl));
+
+    // Task는 종료되지 않음
+    while (1) {
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 1초 대기 (필요 시 수정 가능)
+    }
+}
+
+void app_main(void)
+{
+    motor1_init();
+    motor2_init();
+
+    encoder_interrupt_init();
+    pid_timer_init();
+    
+    while (1)
+    {
+        // pid task
+        if (pid_flag) {
+            pid_flag = false;  // 플래그 초기화
+
+            // 선속도 m/s >> RPM x (pi x 바퀴 지름 (m)) / 60 (s) (0.00455)
+            // 반대로 선속도가 주어질시 RPM = V (m/s) x 60 / 바퀴 둘레(219.78) (m)
+            motor1MeasuredSpeed = encoder1Delta1Count * 10 / 11; //RPM
+            motor2MeasuredSpeed = encoder2Delta1Count * 10 / 11;
+
+            // ERROR
+            motor1SpeedError = motor1TargetSpeed - motor1MeasuredSpeed;
+            motor1DeltaSpeedError = motor1SpeedError - motor1PrevSpeedError;
+            motor1ErrorSum = motor1ErrorSum + motor1SpeedError;
+            motor1PrevSpeedError = motor1SpeedError;
+
+            motor2SpeedError = motor2TargetSpeed - motor2MeasuredSpeed;
+            motor2DeltaSpeedError = motor2SpeedError - motor2PrevSpeedError;
+            motor2ErrorSum = motor2ErrorSum + motor2SpeedError;
+            motor2PrevSpeedError = motor2SpeedError;
+
+            //PID
+            motor1ControlP = motor1Kp * motor1SpeedError;
+            motor1ControlI = motor1Ki * motor1ErrorSum;
+            motor1ControlD = motor1Kd * motor1DeltaSpeedError;
+
+            motor2ControlP = motor2Kp * motor2SpeedError;
+            motor2ControlI = motor2Ki * motor2ErrorSum;
+            motor2ControlD = motor2Kd * motor2DeltaSpeedError;
+
+            motor1ControlOutput = (int)(motor1ControlP + motor1ControlI + motor1ControlD);
+            motor2ControlOutput = (int)(motor2ControlP + motor2ControlI + motor2ControlD);
+
+            if (motor1ControlOutput > 255)       motor1ControlOutput = 255;
+            else if (motor1ControlOutput < -255) motor1ControlOutput = -255;
+            if (motor2ControlOutput > 255)       motor2ControlOutput = 255;
+            else if (motor2ControlOutput < -255) motor2ControlOutput = -255;
+
+            motor1_drive(motor1ControlOutput);
+            motor2_drive(motor2ControlOutput);
+
+            motor1Angle = (int)encoder1Count / 11.0 * 3.0;
+            motor2Angle = (int)encoder2Count / 11.0 * 3.0;
+
+            printf("%f",motor1TargetSpeed);
+            printf(",");
+            printf("%f",motor1MeasuredSpeed);
+            printf(",");
+            printf("%f",motor2TargetSpeed);
+            printf(",");
+            printf("%f\n",motor2MeasuredSpeed);
+        }
+        // motor1Angle = encoder1Count % 1320;
+        // motor2Angle = encoder2Count % 1320;
+
+        // printf("pulse : %f %f, rotation : %d %d, angle : %f %f\n",
+        //                                                 motor1Angle,motor2Angle,
+        //                                                 (int)(encoder1Count / 1320),(int)(encoder2Count / 1320),
+        //                                                 motor1Angle / 1320.0 * 360.0, motor2Angle / 1320.0 * 360.0);
+        vTaskDelay(pdMS_TO_TICKS(10)); 
+    }
+    
+}

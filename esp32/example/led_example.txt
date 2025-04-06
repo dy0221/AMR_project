@@ -1,0 +1,31 @@
+// 표준 입력 출력 헤더 파일, 주로 printf와 같은 함수를 사용하기 위해서 선언
+#include <stdio.h>
+
+// FreeRTOS 헤더 파일, Task 관련 함수를 사용하기 위해서 선언
+// 이 코드에서는 vTaskDelay 사용합니다.
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+// portTICK_PERIOD_MS
+#include "esp_mac.h"
+// GPIO 관련 함수들을 사용하기 위해 선언
+#include "driver/gpio.h"
+
+// LED가 연결된 GPIO 핀 번호 정의 (회로도 참고!)
+#define BLINK_GPIO 2
+
+// LED 상태를 저장하기 위한 전역 변수 정의
+uint8_t led_state = 0;
+
+void app_main(void)
+{
+    gpio_reset_pin(BLINK_GPIO);
+    
+    gpio_set_direction(BLINK_GPIO, GPIO_MODE_OUTPUT);
+
+    while(1){
+        led_state = !led_state;
+
+        gpio_set_level(BLINK_GPIO, led_state);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    };
+}

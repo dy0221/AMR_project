@@ -1,0 +1,91 @@
+//*pin layout
+//-------------------------------------------------------------------------------------------
+//                    |   dir1    dir2    ENCA    ENCB    PWM(enable)    CAN_Rx   CAN_Tx
+//-------------------------------------------------------------------------------------------
+//  Right_motor(M1)   |   26       27     32      33        25            4        5
+//  Left_motor (M2)   |   16       17     18      19        21
+//-------------------------------------------------------------------------------------------
+// gpio : https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/peripherals/gpio.html#_CPPv415gpio_int_type_t
+// ESP_ERROR_CHECK : assert (https://www.youtube.com/watch?v=3ydH14AFhMQ&t=128s) 
+// console : input   https://docs.espressif.com/projects/esp-idf/en/stable/esp32/api-reference/system/console.html
+//         : example https://www.youtube.com/watch?v=fzHefRPDy_w
+
+// 표준 입력 출력 헤더 파일, 주로 printf와 같은 함수를 사용하기 위해서 선언
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "esp_err.h"
+
+// FreeRTOS 헤더 파일, Task 관련 함수를 사용하기 위해서 선언
+// 이 코드에서는 vTaskDelay 사용합니다.
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+
+#include "motor_control.h"
+
+int motor_speed = 0;
+
+// 콘솔 기능 사용을 위한 헤더
+#include "esp_console.h"
+// NVS (비휘발성 저장소) 사용을 위한 헤더 (REPL 환경 구성에 필요)
+#include "nvs.h"
+#include "nvs_flash.h"
+// 프롬프트에 표시될 기본 이름을 프로젝트 타겟으로 설정
+#define PROMPT_STR CONFIG_IDF_TARGET
+
+// 모터 속도 제어 명령어 핸들러
+int cmd_speed_handler(int argc, char **argv) {
+    if (argc != 3) {
+        printf("사용법: speed <m1속도> <m2속도>\n");
+        return 0;
+    }
+    // 문자 정수를 속도로 변환
+    int m1_speed = atoi(argv[1]); 
+    int m2_speed = atoi(argv[2]);
+    // 받은값 출력
+    printf("M1 속도: %d, M2 속도: %d\n", m1_speed, m2_speed);
+    // 모터 실행
+    m1_go(m1_speed);
+    m2_go(m2_speed);
+
+    return 0;
+}
+
+void register_console_commands(void)
+{
+    const esp_console_cmd_t speed_cmd = {
+        .command = "speed",
+        .help = "모터 속도 설정: speed <M1> <M2>",
+        .hint = NULL,
+        .func = &cmd_speed_handler,
+        .argtable = NULL
+    };
+
+    ESP_ERROR_CHECK(esp_console_cmd_register(&speed_cmd));
+}
+
+
+void app_main(void)
+{
+    motor1_init();
+    motor2_init();
+
+    nvs_flash_init();  // NVS 플래시 초기화 (REPL 환경 설정 정보 저장/불러오기 위해 필요)
+    // REPL (Read-Evaluate-Print-Loop) environment
+    // REPL 핸들러용 포인터 선언
+    esp_console_repl_t *repl = NULL;
+   
+    register_console_commands(); //이밴트 함수 등록
+    // 기본 REPL 환경 설정
+    esp_console_repl_config_t repl_config = ESP_CONSOLE_REPL_CONFIG_DEFAULT();
+    repl_config.prompt = PROMPT_STR ">";  // 프롬프트 문자열 설정 예: esp32>
+
+    // UART 입력 기반 콘솔 설정 (115200 baud, 기본 UART 사용)
+    esp_console_dev_uart_config_t hw_config = ESP_CONSOLE_DEV_UART_CONFIG_DEFAULT();
+
+    // UART 기반의 콘솔 REPL 환경 생성
+    esp_console_new_repl_uart(&hw_config, &repl_config, &repl);
+
+    // REPL 루프 시작 (사용자가 명령 입력 가능)
+    esp_console_start_repl(repl);
+}
