@@ -23,6 +23,7 @@
 #include "freertos/task.h"
 
 #include "motor_control.h"
+#include "can_protocol.h"
 
 int motor_speed = 0;
 
@@ -41,9 +42,8 @@ void app_main(void) {
 
     TickType_t last_update_time = xTaskGetTickCount(); // 마지막 업데이트 시간
 
-    //todo : 다음주 주말 (2025.04.13)에 할것
-    //todo : 1. can 통신으로 rapsberrypi와 통신하기
-    //todo : 1. rapsberrypi에서 속도값을 받아서 모터움직이기
+    //todo : 다음주 주말 (2025.04.20)에 할것
+    //todo : 1. microros 공부하기
     //todo : 2. microros로 can 통신해서 esp32에서는 cmd_vel을 받고, raspberrypi에서는 odom을 보내기
      while (1) {
         // 3초마다 목표 속도 업데이트 0>70>140>70>0>-70>-140>-70>0
