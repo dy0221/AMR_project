@@ -27,10 +27,9 @@
 #define M2_PWM_DUTY_RES           LEDC_TIMER_8_BIT  // Set duty resolution to 8 bits / 8비트 해상도 (0~255)
 #define M2_PWM_FREQUENCY          1000 // Frequency in Hertz. Set frequency at 1 kHz / PWM 주파수 (예: 1kHz)
 
-//pid timer=================================
-#define TIMER_DIVIDER         (80)  // 80MHz / 80 = 1MHz (1 tick = 1µs)
-#define PID_TIMER_GROUP           TIMER_GROUP_0
-#define PID_TIMER_INDEX           TIMER_0
+//pid task==================================
+#define TAG "PID_TASK"
+#define PID_TASK_PERIOD_MS 50
 
 extern float motor1Angle, motor2Angle;
 
@@ -67,6 +66,7 @@ void m1chB_ISR(void* arg);
 void m2chA_ISR(void* arg);
 void m2chB_ISR(void* arg);
 void encoder_interrupt_init(void);
-void pid_isr_callback(void *args);
-void pid_timer_init();
+
+void motor_drive_test_task(void *arg);
+void pid_control_task(void *arg);
 #endif

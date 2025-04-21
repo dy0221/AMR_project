@@ -33,7 +33,7 @@ float motor1Angle = 0,            motor2Angle = 0;
 
 //pid 게인 값
 float motor1Kp = 1.4,             motor2Kp = 1.4;
-float motor1Ki = 0.5,             motor2Ki = 0.3;
+float motor1Ki = 0.3,             motor2Ki = 0.3;
 float motor1Kd = 0.5,             motor2Kd = 0.5;
 
 float motor1MeasuredSpeed = 0,    motor2MeasuredSpeed = 0;      //엔코더를 통해 계산된 실제 모터 속도(m/s가 되어야함)
@@ -161,40 +161,85 @@ void encoder_interrupt_init(void){
     ESP_ERROR_CHECK(gpio_isr_handler_add(ENC2_CHA_GPIO, m2chA_ISR, NULL));
     ESP_ERROR_CHECK(gpio_isr_handler_add(ENC2_CHB_GPIO, m2chB_ISR, NULL));
 }
-//pid timer =================================================================================
-void pid_isr_callback(void *args)
-{ 
-    pid_flag = true;
-    encoder1CurrentCount = encoder1Count;
-    encoder2CurrentCount = encoder2Count;
-    encoder1Delta1Count  = encoder1CurrentCount - encoder1Prev1Count;
-    encoder2Delta1Count  = encoder2CurrentCount - encoder2Prev1Count;
-    encoder1Prev1Count   = encoder1CurrentCount;
-    encoder2Prev1Count   = encoder2CurrentCount;
+//pid task ==================================================================================
+// https://docs.espressif.com/projects/esp-idf/en/v4.3/esp32/api-reference/system/freertos.html
+//todo : pid제어가 50ms마다 작동하도록 정하고 수식이 짜여져 있어서 이를 20ms로 바꾸기
+void pid_control_task(void *arg){
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    while (1){
+        vTaskDelayUntil( &xLastWakeTime, pdMS_TO_TICKS(PID_TASK_PERIOD_MS) );
+        
+        encoder1CurrentCount = encoder1Count;
+        encoder2CurrentCount = encoder2Count;
+        encoder1Delta1Count  = encoder1CurrentCount - encoder1Prev1Count;
+        encoder2Delta1Count  = encoder2CurrentCount - encoder2Prev1Count;
+        encoder1Prev1Count   = encoder1CurrentCount;
+        encoder2Prev1Count   = encoder2CurrentCount;
+
+        // 선속도 m/s >> RPM x (pi x 바퀴 지름 (m)) / 60 (s) (0.00455)
+        // 반대로 선속도가 주어질시 RPM = V (m/s) x 60 / 바퀴 둘레(219.78) (m)
+//{Delta_encoder(pulse) / 20(ms)} * {1(rotate)/1320(pulse)} * {60 * 1000 (ms)/ 1 (min)} = Delta_encoder * 25 (rotate) / 11 (min) << rpm
+        motor1MeasuredSpeed = encoder1Delta1Count * 25 / 11; //RPM
+        motor2MeasuredSpeed = encoder2Delta1Count * 25 / 11;
+
+        // ERROR
+        motor1SpeedError = motor1TargetSpeed - motor1MeasuredSpeed;
+        motor1DeltaSpeedError = motor1SpeedError - motor1PrevSpeedError;
+        motor1ErrorSum = motor1ErrorSum + motor1SpeedError;
+        motor1PrevSpeedError = motor1SpeedError;
+
+        motor2SpeedError = motor2TargetSpeed - motor2MeasuredSpeed;
+        motor2DeltaSpeedError = motor2SpeedError - motor2PrevSpeedError;
+        motor2ErrorSum = motor2ErrorSum + motor2SpeedError;
+        motor2PrevSpeedError = motor2SpeedError;
+
+        // PID
+        motor1ControlP = motor1Kp * motor1SpeedError;
+        motor1ControlI = motor1Ki * motor1ErrorSum;
+        motor1ControlD = motor1Kd * motor1DeltaSpeedError;
+
+        motor2ControlP = motor2Kp * motor2SpeedError;
+        motor2ControlI = motor2Ki * motor2ErrorSum;
+        motor2ControlD = motor2Kd * motor2DeltaSpeedError;
+
+        motor1ControlOutput = (int)(motor1ControlP + motor1ControlI + motor1ControlD);
+        motor2ControlOutput = (int)(motor2ControlP + motor2ControlI + motor2ControlD);
+
+        if (motor1ControlOutput > 255)       motor1ControlOutput = 255;
+        else if (motor1ControlOutput < -255) motor1ControlOutput = -255;
+        if (motor2ControlOutput > 255)       motor2ControlOutput = 255;
+        else if (motor2ControlOutput < -255) motor2ControlOutput = -255;
+
+        motor1_drive(motor1ControlOutput);
+        motor2_drive(motor2ControlOutput);
+
+        motor1Angle = (int)encoder1Count / 11.0 * 3.0;
+        motor2Angle = (int)encoder2Count / 11.0 * 3.0;
+
+        printf("%f,%f,%f,%f\n", motor1TargetSpeed, motor1MeasuredSpeed, motor2TargetSpeed, motor2MeasuredSpeed);
+    }
+    
 }
 
-void pid_timer_init()
-{
-    /* Select and initialize basic parameters of the timer */
-    timer_config_t config = {
-        .divider = TIMER_DIVIDER,
-        .counter_dir = TIMER_COUNT_UP,
-        .counter_en = TIMER_PAUSE,
-        .alarm_en = TIMER_ALARM_EN,
-        .auto_reload = true,
-    }; // default clock source is APB
-    ESP_ERROR_CHECK(timer_init(PID_TIMER_GROUP, PID_TIMER_INDEX, &config));
-    // load_val	타이머 카운터에 설정할 초기 값 (tick 단위) 
-    ESP_ERROR_CHECK(timer_set_counter_value(PID_TIMER_GROUP, PID_TIMER_INDEX, 0));
-    // timer 설정
-    ESP_ERROR_CHECK(timer_set_alarm_value(PID_TIMER_GROUP, PID_TIMER_INDEX, 50000)); //50000us == 50ms
-    // 타이머 인터럽트 설정
-    ESP_ERROR_CHECK(timer_enable_intr(PID_TIMER_GROUP, PID_TIMER_INDEX));
+void motor_drive_test_task(void *arg){
+    TickType_t xLastWakeTime = xTaskGetTickCount();
 
-    // 콜백함수 엮기
-    ESP_ERROR_CHECK(timer_isr_callback_add(PID_TIMER_GROUP, PID_TIMER_INDEX, pid_isr_callback, NULL, 0));
-    // 타이머 인터럽트 시작
-    ESP_ERROR_CHECK(timer_start(PID_TIMER_GROUP, PID_TIMER_INDEX));
+    int speed_step = 70; // 속도 변화 단계
+    int max_speed = 100; // 최대 속도
+    int min_speed = -100; // 최소 속도
+    int direction = 1; // 속도 증가(1) 또는 감소(-1)
+
+    while (1){
+        vTaskDelayUntil( &xLastWakeTime, pdMS_TO_TICKS(3000) );
+
+        motor1TargetSpeed += direction * speed_step;
+        motor2TargetSpeed += direction * speed_step;
+        // 속도가 최대값 또는 최소값에 도달하면 방향 반전
+        if (motor1TargetSpeed >= max_speed || motor1TargetSpeed <= min_speed) {
+            direction *= -1;
+        }
+
+    }
 }
 
 //motor drive ===============================================================================
