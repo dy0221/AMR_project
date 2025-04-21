@@ -1,6 +1,29 @@
 #ifndef MOTOR_CONTROL_H_
 #define MOTOR_CONTROL_H_
 
+#include "shared_variables.h"
+
+#include <stdio.h>
+#include <stdlib.h>  // abs 사용 시 필요
+#include <stdbool.h> // bool자료형
+
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
+#include "freertos/queue.h"
+#include "driver/timer.h"
+
+#include "esp_err.h"
+#include "esp_log.h"
+// GPIO 관련 함수들을 사용하기 위해 선언
+#include "driver/gpio.h"
+#include "driver/ledc.h"
+// pid timer
+#include "driver/timer.h"
+
+
+// interrupt
+#include "esp_intr_types.h"
+
 //M1(right)===============================
 #define ENC1_CHA_GPIO   32
 #define ENC1_CHB_GPIO   33
@@ -12,7 +35,7 @@
 #define M1_PWM_MODE               LEDC_HIGH_SPEED_MODE
 #define M1_PWM_CHANNEL            LEDC_CHANNEL_1   // 사용할 채널 설정 (0~8가능)
 #define M1_PWM_DUTY_RES           LEDC_TIMER_8_BIT  // Set duty resolution to 8 bits / 8비트 해상도 (0~255)
-#define M1_PWM_FREQUENCY          1000 // Frequency in Hertz. Set frequency at 1 kHz / PWM 주파수 (예: 1kHz)
+#define M1_PWM_FREQUENCY          10000 // Frequency in Hertz. Set frequency at 1 kHz / PWM 주파수 (예: 1kHz)
 
 //M2(left)================================
 #define ENC2_CHA_GPIO             18
@@ -25,11 +48,11 @@
 #define M2_PWM_MODE               LEDC_HIGH_SPEED_MODE
 #define M2_PWM_CHANNEL            LEDC_CHANNEL_0   // 사용할 채널 설정 (0~8가능)
 #define M2_PWM_DUTY_RES           LEDC_TIMER_8_BIT  // Set duty resolution to 8 bits / 8비트 해상도 (0~255)
-#define M2_PWM_FREQUENCY          1000 // Frequency in Hertz. Set frequency at 1 kHz / PWM 주파수 (예: 1kHz)
+#define M2_PWM_FREQUENCY          10000 // Frequency in Hertz. Set frequency at 1 kHz / PWM 주파수 (예: 1kHz)
 
 //pid task==================================
 #define TAG "PID_TASK"
-#define PID_TASK_PERIOD_MS 50
+#define PID_TASK_PERIOD_MS 20
 
 extern float motor1Angle, motor2Angle;
 
@@ -39,7 +62,6 @@ extern float motor1Ki, motor2Ki;
 extern float motor1Kd, motor2Kd;
 
 extern float motor1MeasuredSpeed, motor2MeasuredSpeed;      //엔코더를 통해 계산된 실제 모터 속도(m/s가 되어야함)
-extern float motor1TargetSpeed, motor2TargetSpeed;        //목표 속도
 extern float motor1SpeedError, motor2SpeedError;         //오차 속도 = 목표 속도 - 실제 속도
 extern float motor1PrevSpeedError, motor2PrevSpeedError;     //이전 주기에서 사용한 오차들을 저장
 extern float motor1DeltaSpeedError, motor2DeltaSpeedError;    //오차의 변화량
@@ -55,7 +77,6 @@ extern long encoder1Count, encoder2Count;         //엔코더 카운터
 extern long encoder1CurrentCount, encoder1Prev1Count, encoder1Delta1Count; //엔코더 현제값, 이전값,
 extern long encoder2CurrentCount, encoder2Prev1Count, encoder2Delta1Count;
 
-extern volatile bool pid_flag;
 //Function================================
 void motor1_init(void);
 void motor2_init(void);

@@ -5,27 +5,6 @@
 //  Right_motor(M1)   |   26       27     32      33        25            4        5
 //  Left_motor (M2)   |   16       17     18      19        21
 //-------------------------------------------------------------------------------------------
-
-#include <stdio.h>
-#include <stdlib.h>  // abs 사용 시 필요
-#include <stdbool.h> // bool자료형
-
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
-#include "freertos/queue.h"
-#include "driver/timer.h"
-
-#include "esp_err.h"
-// GPIO 관련 함수들을 사용하기 위해 선언
-#include "driver/gpio.h"
-#include "driver/ledc.h"
-// pid timer
-#include "driver/timer.h"
-
-
-// interrupt
-#include "esp_intr_types.h"
-
 #include "motor_control.h"
 
 //pid===========================
@@ -37,7 +16,6 @@ float motor1Ki = 0.3,             motor2Ki = 0.3;
 float motor1Kd = 0.5,             motor2Kd = 0.5;
 
 float motor1MeasuredSpeed = 0,    motor2MeasuredSpeed = 0;      //엔코더를 통해 계산된 실제 모터 속도(m/s가 되어야함)
-float motor1TargetSpeed = 0,      motor2TargetSpeed = 0;        //목표 속도
 float motor1SpeedError = 0,       motor2SpeedError = 0;         //오차 속도 = 목표 속도 - 실제 속도
 float motor1PrevSpeedError = 0,   motor2PrevSpeedError = 0;     //이전 주기에서 사용한 오차들을 저장
 float motor1DeltaSpeedError = 0,  motor2DeltaSpeedError = 0;    //오차의 변화량
@@ -52,8 +30,6 @@ int motor1ControlOutput = 0,      motor2ControlOutput = 0;   //모터의 pwm로 
 long encoder1Count = 0,           encoder2Count = 0;         //엔코더 카운터
 long encoder1CurrentCount = 0,    encoder1Prev1Count = 0, encoder1Delta1Count  = 0; //엔코더 현제값, 이전값,
 long encoder2CurrentCount = 0,    encoder2Prev1Count = 0, encoder2Delta1Count  = 0;
-
-volatile bool pid_flag = false;
 
 //motor init =====================================================================================
 void motor1_init(void)
@@ -168,7 +144,7 @@ void pid_control_task(void *arg){
     TickType_t xLastWakeTime = xTaskGetTickCount();
     while (1){
         vTaskDelayUntil( &xLastWakeTime, pdMS_TO_TICKS(PID_TASK_PERIOD_MS) );
-        
+        TickType_t tick = xTaskGetTickCount();
         encoder1CurrentCount = encoder1Count;
         encoder2CurrentCount = encoder2Count;
         encoder1Delta1Count  = encoder1CurrentCount - encoder1Prev1Count;
@@ -183,6 +159,7 @@ void pid_control_task(void *arg){
         motor2MeasuredSpeed = encoder2Delta1Count * 25 / 11;
 
         // ERROR
+        // portENTER_CRITICAL(&target_speed_mux);
         motor1SpeedError = motor1TargetSpeed - motor1MeasuredSpeed;
         motor1DeltaSpeedError = motor1SpeedError - motor1PrevSpeedError;
         motor1ErrorSum = motor1ErrorSum + motor1SpeedError;
@@ -192,6 +169,7 @@ void pid_control_task(void *arg){
         motor2DeltaSpeedError = motor2SpeedError - motor2PrevSpeedError;
         motor2ErrorSum = motor2ErrorSum + motor2SpeedError;
         motor2PrevSpeedError = motor2SpeedError;
+        // portENTER_CRITICAL(&target_speed_mux);
 
         // PID
         motor1ControlP = motor1Kp * motor1SpeedError;
@@ -216,7 +194,7 @@ void pid_control_task(void *arg){
         motor1Angle = (int)encoder1Count / 11.0 * 3.0;
         motor2Angle = (int)encoder2Count / 11.0 * 3.0;
 
-        printf("%f,%f,%f,%f\n", motor1TargetSpeed, motor1MeasuredSpeed, motor2TargetSpeed, motor2MeasuredSpeed);
+        printf("%lu,%f,%f,%f,%f\n", (unsigned long)(tick) * portTICK_PERIOD_MS, motor1TargetSpeed, motor1MeasuredSpeed, motor2TargetSpeed, motor2MeasuredSpeed);
     }
     
 }

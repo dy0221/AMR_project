@@ -23,6 +23,7 @@
 #include "freertos/task.h"
 
 #include "motor_control.h"
+#include "shared_variables.h"
 #include "can_protocol.h"
 
 int motor_speed = 0;
@@ -33,15 +34,14 @@ void app_main(void) {
     motor2_init();
 
     encoder_interrupt_init();
+    twai_init();
     // PID 제어 태스크 생성
     xTaskCreatePinnedToCore(
-        pid_control_task,     // 태스크 함수
-        "PID_Task",           // 태스크 이름
-        4096,                 // 스택 크기 (바이트 단위)
-        NULL,                 // 태스크 인자
-        5,                    // 우선순위 (가장 높음)
-        NULL,                 // 핸들 (필요 없으면 NULL)
-        0                     // Core 0 고정
+        pid_control_task, "PID_Task", 4096, NULL, 5, NULL, 0
+    );
+
+    xTaskCreatePinnedToCore(
+        twai_rcv_task, "Twai_Task", 4096, NULL, 4, NULL, 0
     );
 
     xTaskCreatePinnedToCore(
