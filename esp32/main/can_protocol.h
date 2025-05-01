@@ -15,5 +15,6 @@
 
 void twai_init();
 void twai_rcv_task(void *arg);
+void twai_send_task(void *arg);
 
 #endif // CAN_PROTOCOL_H

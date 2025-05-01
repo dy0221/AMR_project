@@ -34,14 +34,18 @@ void twai_rcv_task(void *arg){
                 if (twai_receive(&msg, 0) == ESP_OK) {
                     int left = (int16_t)((msg.data[1] << 8) | msg.data[0]);
                     int right = (int16_t)((msg.data[3] << 8) | msg.data[2]);
-                    portENTER_CRITICAL(&target_speed_mux);
+                    portENTER_CRITICAL(&shared_var_mux);
                     motor1TargetSpeed = right;
                     motor2TargetSpeed = left;
-                    portEXIT_CRITICAL(&target_speed_mux);
+                    portEXIT_CRITICAL(&shared_var_mux);
                     // ESP_LOGI("CAN_RX", "L=%d R=%d", left, right);
 
                 }
             }
         }
     }
+}
+
+void twai_send_task(void *arg){
+    
 }

@@ -22,12 +22,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "motor_control.h"
 #include "shared_variables.h"
+#include "motor_control.h"
 #include "can_protocol.h"
+#include "logging.h"
 
 int motor_speed = 0;
-
 
 void app_main(void) {
     motor1_init();
@@ -36,16 +36,18 @@ void app_main(void) {
     encoder_interrupt_init();
     twai_init();
     // PID 제어 태스크 생성
+    log_queue = xQueueCreate(20, sizeof(log_data_t));
     xTaskCreatePinnedToCore(
         pid_control_task, "PID_Task", 4096, NULL, 5, NULL, 0
     );
 
     xTaskCreatePinnedToCore(
-        twai_rcv_task, "Twai_Task", 4096, NULL, 4, NULL, 0
+        twai_rcv_task, "Twai_Task", 4096, NULL, 3, NULL, 0
     );
 
     xTaskCreatePinnedToCore(
         motor_drive_test_task, "MotorTest", 2048, NULL, 1, NULL, 1 // Core 1에 고정, 우선순위 낮게
     );
 
+    xTaskCreatePinnedToCore(logging_task, "Logging", 4096, NULL, 2, NULL, 1);
 }

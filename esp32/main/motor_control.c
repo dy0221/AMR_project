@@ -8,8 +8,6 @@
 #include "motor_control.h"
 
 //pid===========================
-float motor1Angle = 0,            motor2Angle = 0;
-
 //pid 게인 값
 float motor1Kp = 1.4,             motor2Kp = 1.4;
 float motor1Ki = 0.3,             motor2Ki = 0.3;
@@ -30,6 +28,14 @@ int motor1ControlOutput = 0,      motor2ControlOutput = 0;   //모터의 pwm로 
 long encoder1Count = 0,           encoder2Count = 0;         //엔코더 카운터
 long encoder1CurrentCount = 0,    encoder1Prev1Count = 0, encoder1Delta1Count  = 0; //엔코더 현제값, 이전값,
 long encoder2CurrentCount = 0,    encoder2Prev1Count = 0, encoder2Delta1Count  = 0;
+
+float motor1Angle = 0, motor2Angle = 0;
+float rad_r = 0      , rad_l = 0;
+float S_r = 0        , S_l = 0;
+float prev_S_r = 0   , prev_S_l = 0;
+float delta_S_r = 0  , delta_S_l = 0;
+float delta_S = 0;
+float delta_theta = 0;
 
 //motor init =====================================================================================
 void motor1_init(void)
@@ -144,7 +150,7 @@ void pid_control_task(void *arg){
     TickType_t xLastWakeTime = xTaskGetTickCount();
     while (1){
         vTaskDelayUntil( &xLastWakeTime, pdMS_TO_TICKS(PID_TASK_PERIOD_MS) );
-        TickType_t tick = xTaskGetTickCount();
+        int64_t t_start_us = esp_timer_get_time();
         encoder1CurrentCount = encoder1Count;
         encoder2CurrentCount = encoder2Count;
         encoder1Delta1Count  = encoder1CurrentCount - encoder1Prev1Count;
@@ -190,14 +196,57 @@ void pid_control_task(void *arg){
 
         motor1_drive(motor1ControlOutput);
         motor2_drive(motor2ControlOutput);
+        
+        // 360 (degree) / 1320 (pulse) == 3 / 11
+        motor1Angle = encoder1Count / 11.0 * 3.0;
+        motor2Angle = encoder2Count / 11.0 * 3.0;
 
-        motor1Angle = (int)encoder1Count / 11.0 * 3.0;
-        motor2Angle = (int)encoder2Count / 11.0 * 3.0;
+        rad_r = motor1Angle * M_PI / 180;
+        rad_l = motor2Angle * M_PI / 180;
 
-        printf("%lu,%f,%f,%f,%f\n", (unsigned long)(tick) * portTICK_PERIOD_MS, motor1TargetSpeed, motor1MeasuredSpeed, motor2TargetSpeed, motor2MeasuredSpeed);
+        S_r = WHEEL_RADIUS * rad_r; // cm * rad
+        S_l = WHEEL_RADIUS * rad_l;
+
+        delta_S_r = S_r - prev_S_r;
+        delta_S_l = S_l - prev_S_l;
+
+        prev_S_r = S_r;
+        prev_S_l = S_l;
+
+        delta_S = (delta_S_r + delta_S_l)/2;
+        delta_theta = (delta_S_r - delta_S_l) / AMR_LENGTH;
+
+        pose_x += delta_S * cosf(orientation_theta + delta_theta / 2.0f);
+        pose_y += delta_S * sinf(orientation_theta + delta_theta / 2.0f);
+        orientation_theta += delta_theta;
+
+        int64_t exec_time_us = esp_timer_get_time() - t_start_us;
+        log_data_t pid_msg = {
+            .type = LOG_TYPE_PID,
+            .timestamp_ms = exec_time_us / 1000,
+            .pid = {
+                .m1_target = motor1TargetSpeed,
+                .m1_meas = motor1MeasuredSpeed,
+                .m2_target = motor2TargetSpeed,
+                .m2_meas = motor2MeasuredSpeed
+            }
+        };
+        // xQueueSend(log_queue, &pid_msg, 0);
+
+        log_data_t odom_msg = {
+            .type = LOG_TYPE_ODOM,
+            .timestamp_ms = exec_time_us / 1000,
+            .odom = {
+                .x = pose_x,
+                .y = pose_y,
+                .theta = orientation_theta
+            }
+        };
+        // xQueueSend(log_queue, &odom_msg, 0);
     }
     
 }
+
 
 void motor_drive_test_task(void *arg){
     TickType_t xLastWakeTime = xTaskGetTickCount();

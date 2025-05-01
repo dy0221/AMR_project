@@ -10,7 +10,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/queue.h"
-#include "driver/timer.h"
 
 #include "esp_err.h"
 #include "esp_log.h"
@@ -20,9 +19,11 @@
 // pid timer
 #include "driver/timer.h"
 
-
+#include "esp_timer.h"  // 꼭 include 해줘야 함
 // interrupt
 #include "esp_intr_types.h"
+// odometry
+#include <math.h>
 
 //M1(right)===============================
 #define ENC1_CHA_GPIO   32
@@ -54,7 +55,10 @@
 #define TAG "PID_TASK"
 #define PID_TASK_PERIOD_MS 20
 
-extern float motor1Angle, motor2Angle;
+// robot spec===============================
+#define ODOM_TASK_PERIOD_MS 40
+#define WHEEL_RADIUS    4.35 //cm (87mm)
+#define AMR_LENGTH 22.0 // cm
 
 //pid 게인 값
 extern float motor1Kp, motor2Kp;
@@ -76,6 +80,16 @@ extern int motor1ControlOutput, motor2ControlOutput;   //모터의 pwm로 들어
 extern long encoder1Count, encoder2Count;         //엔코더 카운터
 extern long encoder1CurrentCount, encoder1Prev1Count, encoder1Delta1Count; //엔코더 현제값, 이전값,
 extern long encoder2CurrentCount, encoder2Prev1Count, encoder2Delta1Count;
+
+//odometry
+extern float motor1Angle, motor2Angle;
+extern float rad_r, rad_l;
+extern float S_r, S_l;
+extern float prev_S_r, prev_S_l;
+extern float delta_S_r, delta_S_l;
+extern float delta_S;
+extern float delta_theta;
+
 
 //Function================================
 void motor1_init(void);
