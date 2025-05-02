@@ -42,11 +42,15 @@ void app_main(void) {
     );
 
     xTaskCreatePinnedToCore(
-        twai_rcv_task, "Twai_Task", 4096, NULL, 3, NULL, 0
+        twai_rcv_task, "Twai_rcv_Task", 4096, NULL, 3, NULL, 0
     );
 
     xTaskCreatePinnedToCore(
         motor_drive_test_task, "MotorTest", 2048, NULL, 1, NULL, 1 // Core 1에 고정, 우선순위 낮게
+    );
+
+    xTaskCreatePinnedToCore(
+        twai_send_task, "Twai_send_Task", 2048, NULL, 2, NULL, 1 // Core 1에 고정
     );
 
     xTaskCreatePinnedToCore(logging_task, "Logging", 4096, NULL, 2, NULL, 1);

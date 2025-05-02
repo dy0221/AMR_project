@@ -12,7 +12,8 @@ extern float pose_x, pose_y, orientation_theta;
 // 로그 타입 정의
 typedef enum {
     LOG_TYPE_PID,
-    LOG_TYPE_ODOM
+    LOG_TYPE_ODOM,
+    LOG_TYPE_CAN,
 } log_type_t;
 
 typedef struct {
@@ -26,6 +27,10 @@ typedef struct {
         struct {
             float x, y, theta;
         } odom;
+
+        struct {
+            int msg_id;
+        } can;
     };
 } log_data_t;
 

@@ -17,6 +17,12 @@ void logging_task(void *arg) {
                              msg.timestamp_ms,
                              msg.odom.x, msg.odom.y, msg.odom.theta);
                     break;
+                
+                case LOG_TYPE_CAN:
+                    ESP_LOGI("LOG_CAN", "[%lu ms] msg_id: %d is failed",
+                             msg.timestamp_ms,
+                             msg.can.msg_id);
+                    break;
             }
         }
     }

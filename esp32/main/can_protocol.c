@@ -1,5 +1,6 @@
 #include "can_protocol.h"
 
+
 void twai_init(){
     // TWAI 구성 (Normal mode)
     twai_general_config_t g_config = {
@@ -47,5 +48,56 @@ void twai_rcv_task(void *arg){
 }
 
 void twai_send_task(void *arg){
+    TickType_t xLastWakeTime = xTaskGetTickCount();
+    while (1){
+        vTaskDelayUntil( &xLastWakeTime, pdMS_TO_TICKS(TWAI_SEND_TASK_PERIOD_MS) );
+        uint64_t exec_time_us = esp_timer_get_time();
+        uint8_t packet_id = exec_time_us % 100; // us 단위 , 0-99
+        twai_message_t msg1 = {
+            .identifier = 0x100,
+            .data_length_code = 8,
+            .extd = 0,
+            .rtr = 0,
+        };
+        
+        twai_message_t msg2 = {
+            .identifier = 0x101,
+            .data_length_code = 8,
+            .extd = 0,
+            .rtr = 0,
+        };
+
+        msg1.data[0] = packet_id;
+        msg1.data[1] = 0;
+        memcpy(&msg1.data[2], &pose_x, 4);
+        memcpy(&msg1.data[6], &pose_y, 2);
+
+        msg2.data[0] = packet_id;
+        msg2.data[1] = 0;
+        memcpy(&msg2.data[2], ((uint8_t *)&pose_y) + 2, 2);
+        memcpy(&msg2.data[4], &orientation_theta, 4);
+
     
+        if (twai_transmit(&msg1, pdMS_TO_TICKS(10)) == ESP_OK) {
+            log_data_t can_msg1 = {
+                .type = LOG_TYPE_CAN,
+                .timestamp_ms = exec_time_us / 1000,
+                .can = {
+                    .msg_id = 1
+                }
+            };
+            xQueueSend(log_queue, &can_msg1, 0);
+        }
+
+        if (twai_transmit(&msg2, pdMS_TO_TICKS(10)) == ESP_OK) {
+            log_data_t can_msg2 = {
+                .type = LOG_TYPE_CAN,
+                .timestamp_ms = exec_time_us / 1000,
+                .can = {
+                    .msg_id = 2
+                }
+            };
+            xQueueSend(log_queue, &can_msg2, 0);
+        }
+    }
 }
