@@ -13,7 +13,7 @@
 #define TAG "TWAI_REAL"
 #define TX_GPIO_NUM 5
 #define RX_GPIO_NUM 4
-#define TWAI_SEND_TASK_PERIOD_MS 50
+#define TWAI_SEND_TASK_PERIOD_MS 20
 
 
 void twai_init();

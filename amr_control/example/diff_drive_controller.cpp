@@ -312,12 +312,12 @@
    {
      auto & limited_velocity_command = realtime_limited_velocity_publisher_->msg_;
      limited_velocity_command.header.stamp = time;
-     limited_velocity_command.twist.linear.x = linear_command;
-     limited_velocity_command.twist.linear.y = 0.0;
-     limited_velocity_command.twist.linear.z = 0.0;
-     limited_velocity_command.twist.angular.x = 0.0;
-     limited_velocity_command.twist.angular.y = 0.0;
-     limited_velocity_command.twist.angular.z = angular_command;
+     limited_velocity_command.twist.front().linear.x = linear_command;
+     limited_velocity_command.twist.front().linear.y = 0.0;
+     limited_velocity_command.twist.front().linear.z = 0.0;
+     limited_velocity_command.twist.front().angular.x = 0.0;
+     limited_velocity_command.twist.front().angular.y = 0.0;
+     limited_velocity_command.twist.front().angular.z = angular_command;
      realtime_limited_velocity_publisher_->unlockAndPublish();
    }
  
@@ -674,7 +674,7 @@
    velocity_command_subscriber_.reset();
  
    return true;
- }
+ }  
  
  void DiffDriveController::reset_buffers()
  {

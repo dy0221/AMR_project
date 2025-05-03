@@ -28,17 +28,22 @@ float bytesToFloat(const uint8_t* bytes) {
 
 int main() {
     const char* ifname = "can0";
+    // can 소켓 생성
     int sockfd = socket(PF_CAN, SOCK_RAW, CAN_RAW);
     if (sockfd < 0) {
-        perror("Socket");
+        std::cout<<"Error creating socket: " << std::endl;
         return 1;
     }
 
     sockaddr_can addr {};
+    //ifreq << linux/can.h>에서 정의된 구조체, socket의 인터페이스 정보를 담고 있다.
+    // ioctl호출에 사용되는 구조체
     ifreq ifr {};
+    //ifr_name에 can0을 넣어준다.
     std::strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
+    // can0라는 이름이 실제로 몇번 인터페이스에 존재하는지 불러온다.
     if (ioctl(sockfd, SIOCGIFINDEX, &ifr) < 0) {
-        perror("ioctl");
+        std::cout<<"Error getting interface index: " << std::endl;
         return 1;
     }
 

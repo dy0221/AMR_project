@@ -17,15 +17,23 @@ endif()
 ################################################################################
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(realtime_tools REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_msgs REQUIRED)
+find_package(tf2_msgs REQUIRED)
 
 set(DEPENDENCIES
   rclcpp
+  realtime_tools
   geometry_msgs
   nav_msgs
   sensor_msgs
+  tf2
+  tf2_msgs
+
 )
 
 ################################################################################
@@ -39,15 +47,14 @@ include_directories(
 
 # 라이브러리 정의
 add_library(${PROJECT_NAME}_lib
-  src/diff_drive_controller.cpp
-  src/odometry.cpp
+  src/amr_controller.cpp
 )
 
 target_link_libraries(${PROJECT_NAME}_lib)
 ament_target_dependencies(${PROJECT_NAME}_lib ${DEPENDENCIES})
 
 # 실행 파일 정의
-add_executable(${PROJECT_NAME} src/node_main.cpp)
+add_executable(${PROJECT_NAME} src/amr_controller.cpp)
 target_link_libraries(${PROJECT_NAME} ${PROJECT_NAME}_lib)
 ament_target_dependencies(${PROJECT_NAME} ${DEPENDENCIES})
 
@@ -56,9 +63,9 @@ ament_target_dependencies(${PROJECT_NAME} ${DEPENDENCIES})
 ################################################################################
 
 # 파라미터 폴더 설치 (없다면 생략해도 됨)
-install(DIRECTORY param
-  DESTINATION share/${PROJECT_NAME}
-)
+# install(DIRECTORY param
+#   DESTINATION share/${PROJECT_NAME}
+# )
 
 # 실행 파일 설치
 install(TARGETS ${PROJECT_NAME}
