@@ -1,6 +1,3 @@
-//todo : 다음주 주말 (2025.04.27)에 할것
-//todo : 일단 라즈베리파이를 사용하면 반드시 캔으로 해야하므로 pc에서 와이파이로 아래 control구조 만들어보기
-//todo : can 패킷을 읽고 이를 pub하는 노드로 바꿔야 한다.
-
-//todo : /odom: 50Hz
-         /tf: 10~20Hz
+//todo : amr_control cmd_vel sub완성(속도제한고려)     
+//todo : 와이파이로 멀티캐스트가 안돼서 핫스팟으로해보기      
+//gazebo : rviz띄우기      
