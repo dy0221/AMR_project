@@ -22,6 +22,9 @@
 #include <realtime_tools/realtime_publisher.hpp>
 #include <tf2/LinearMath/Quaternion.hpp>
 
+#include "tf2_ros/transform_broadcaster.h"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+
 struct PacketPair {
   can_frame msg1;
   can_frame msg2;
@@ -62,6 +65,8 @@ private:
   std::shared_ptr<rclcpp::Publisher<tf2_msgs::msg::TFMessage>> odometry_transform_publisher_ =
     nullptr;
 
+  std::unique_ptr<tf2_ros::TransformBroadcaster> tf_broadcaster_ = nullptr;
+
   rclcpp::Duration cmd_vel_timeout_ = rclcpp::Duration::from_seconds(0.5);
   bool subscriber_is_active_ = false;
   rclcpp::Subscription<TwistStamped>::SharedPtr velocity_command_subscriber_ = nullptr;
@@ -77,6 +82,7 @@ private:
   //message
   nav_msgs::msg::Odometry odometry_message_;
   tf2_msgs::msg::TFMessage odometry_transform_message_;
+  geometry_msgs::msg::TransformStamped tf2_broadcast_message_;
 
 };
 };

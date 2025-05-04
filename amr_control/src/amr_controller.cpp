@@ -151,13 +151,18 @@ void amr_control::AmrControllorNode::create_topic(){
     }
 
     // odom -> base link 변환 publisher
-    odometry_transform_publisher_ = this->create_publisher<tf2_msgs::msg::TFMessage>(
-        DEFAULT_TRANSFORM_TOPIC, rclcpp::SystemDefaultsQoS());
+    // odometry_transform_publisher_ = this->create_publisher<tf2_msgs::msg::TFMessage>(
+    //     DEFAULT_TRANSFORM_TOPIC, rtf2_ros::DynamicBroadcasterQoS());
 
-    // keeping track of odom and base_link transforms only
-    odometry_transform_message_.transforms.resize(1);
-    odometry_transform_message_.transforms.front().header.frame_id = odom_frame_id;
-    odometry_transform_message_.transforms.front().child_frame_id = base_frame_id;
+    // // keeping track of odom and base_link transforms only
+    // odometry_transform_message_.transforms.resize(1);
+    // odometry_transform_message_.transforms.front().header.frame_id = odom_frame_id;
+    // odometry_transform_message_.transforms.front().child_frame_id = base_frame_id;
+
+    // 직접 브로드캐스팅하지말고 브로드캐스터를 사용해보자
+    tf_broadcaster_ = std::make_unique<tf2_ros::TransformBroadcaster>(this->shared_from_this());
+    tf2_broadcast_message_.header.frame_id = odom_frame_id;
+    tf2_broadcast_message_.child_frame_id = base_frame_id;
     
     previous_update_timestamp_ = this->get_clock()->now();
 
@@ -280,15 +285,27 @@ void amr_control::AmrControllorNode::read_and_publish(){
 
                 odometry_publisher_->publish(odometry_message_);
 
-                odometry_transform_message_.transforms.front().header.stamp = current_time;
-                odometry_transform_message_.transforms.front().transform.translation.x = pose_x / 100;
-                odometry_transform_message_.transforms.front().transform.translation.y = pose_y / 100;
-                odometry_transform_message_.transforms.front().transform.rotation.x = orientation.x();
-                odometry_transform_message_.transforms.front().transform.rotation.y = orientation.y();
-                odometry_transform_message_.transforms.front().transform.rotation.z = orientation.z();
-                odometry_transform_message_.transforms.front().transform.rotation.w = orientation.w();
+                // odometry_transform_message_.transforms.front().header.stamp = current_time;
+                // odometry_transform_message_.transforms.front().transform.translation.x = pose_x / 100;
+                // odometry_transform_message_.transforms.front().transform.translation.y = pose_y / 100;
+                // odometry_transform_message_.transforms.front().transform.rotation.x = orientation.x();
+                // odometry_transform_message_.transforms.front().transform.rotation.y = orientation.y();
+                // odometry_transform_message_.transforms.front().transform.rotation.z = orientation.z();
+                // odometry_transform_message_.transforms.front().transform.rotation.w = orientation.w();
 
-                odometry_transform_publisher_->publish(odometry_transform_message_);
+                // odometry_transform_publisher_->publish(odometry_transform_message_);
+                //https://docs.ros.org/en/galactic/Tutorials/Intermediate/Tf2/Writing-A-Tf2-Broadcaster-Cpp.html
+                tf2_broadcast_message_.header.stamp = current_time;
+                tf2_broadcast_message_.transform.translation.x = pose_x / 100;
+                tf2_broadcast_message_.transform.translation.y = pose_y / 100;
+                tf2_broadcast_message_.transform.translation.z = 0.0;
+                tf2_broadcast_message_.transform.rotation.x = orientation.x();
+                tf2_broadcast_message_.transform.rotation.y = orientation.y();
+                tf2_broadcast_message_.transform.rotation.z = orientation.z();
+                tf2_broadcast_message_.transform.rotation.w = orientation.w();
+
+                // Send the transformation
+                tf_broadcaster_->sendTransform(tf2_broadcast_message_);
 
             }
 
